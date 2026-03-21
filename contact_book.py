@@ -1,25 +1,15 @@
 # ============================================================
-# Contact Book — Session 1.3
-# Concepts used: lists, dictionaries, for loops, f-strings,
-#                enumerate(), .lower(), in operator,
-#                import, open(), with, json.dump/load, try/except
+# Contact Book — Session 1.4
+# Concepts used: all from 1.3, plus:
+#   - main() function pattern
+#   - if __name__ == "__main__":
+#   - return values instead of global variables
+#   - helper functions to avoid repeated code
 # ============================================================
 
-import json   # built-in module — no install needed
-              # gives us json.dump() and json.load()
+import json
 
-# ------------------------------------------------------------
-# THE DATA STORE
-# ------------------------------------------------------------
-# A list is written with square brackets: []
-# This starts empty — load_contacts() will fill it from disk.
-# In VBA terms: think of this as a dynamic array of records.
-
-CONTACTS_FILE = "contacts.json"   # the file we'll save to/load from
-                                  # ALL_CAPS = a constant (convention only,
-                                  # Python doesn't enforce it)
-
-contacts = []   # each item in here will be a dictionary
+CONTACTS_FILE = "contacts.json"
 
 
 # ------------------------------------------------------------
@@ -28,169 +18,243 @@ contacts = []   # each item in here will be a dictionary
 
 def load_contacts():
     """
-    Reads contacts from the JSON file into our 'contacts' list.
-    Runs once when the program starts.
+    Reads contacts from the JSON file and RETURNS them as a list.
 
-    'global contacts' tells Python we want to replace the list
-    defined at the top of the file, not create a local variable.
+    Previously we used 'global contacts' to modify an outside variable.
+    Now we simply return the data — the caller decides what to do with it.
 
-    try/except catches errors so the program doesn't crash when
-    the file doesn't exist yet (first run).
+    Return value: a list of contact dictionaries (may be empty).
     """
-    global contacts
     try:
         with open(CONTACTS_FILE, "r") as f:
-            # json.load() reads the file and converts JSON → Python
-            # The result is our list of dictionaries, ready to use
             contacts = json.load(f)
         print(f"  Loaded {len(contacts)} contact(s) from {CONTACTS_FILE}")
+        return contacts               # ← hand the list back to the caller
     except FileNotFoundError:
-        # This is fine — it just means no contacts have been saved yet
-        contacts = []
         print("  No save file found — starting with empty contact list.")
+        return []                     # ← return an empty list (not None)
 
 
-def save_contacts():
+def save_contacts(contacts):
     """
-    Writes the current 'contacts' list to the JSON file.
-    Called after every add or delete so data is never lost.
+    Writes the contacts list to the JSON file.
 
-    "w" mode creates the file if it doesn't exist, or
-    overwrites it if it does — we always want the full list.
+    Previously this reached for the global 'contacts'.
+    Now we receive it as a parameter — cleaner and more explicit.
 
-    indent=2 makes the JSON file human-readable (pretty-printed).
+    Parameter: contacts — the list of contact dictionaries to save.
     """
     with open(CONTACTS_FILE, "w") as f:
         json.dump(contacts, f, indent=2)
-        # json.dump() converts Python → JSON and writes to the file
 
 
 # ------------------------------------------------------------
 # HELPER FUNCTIONS
 # ------------------------------------------------------------
 
-def add_contact(name, phone, email):
+def print_contact_row(contact):
     """
-    Creates a new contact dictionary and appends it to the list.
+    Prints a single contact as a formatted row.
 
-    A dictionary is written with curly braces: {}
-    Each entry is a key: value pair, separated by commas.
-    Keys are strings (in quotes). Values can be anything.
+    This is a NEW helper we didn't have before.
+    Previously, list_contacts() and search_contacts() both had
+    their own print logic — slightly different, and duplicated.
+
+    Rule of thumb: if you write the same thing twice, make it a function.
+
+    Parameter: contact — one contact dictionary.
+    """
+    name  = contact["name"]
+    phone = contact["phone"]
+    email = contact["email"]
+    print(f"    {name:<20} {phone:<15} {email}")
+
+
+def print_contact_table(contact_list):
+    """
+    Prints a header row then calls print_contact_row() for each contact.
+
+    Parameter: contact_list — a list of contact dictionaries.
+    """
+    print(f"  {'Name':<20} {'Phone':<15} {'Email'}")
+    print(f"  {'-'*20} {'-'*15} {'-'*25}")
+    for contact in contact_list:
+        print_contact_row(contact)
+
+
+# ------------------------------------------------------------
+# CONTACT FUNCTIONS
+# (each receives 'contacts', does its job, returns updated list)
+# ------------------------------------------------------------
+
+def add_contact(contacts, name, phone, email):
+    """
+    Creates a new contact dictionary and adds it to the list.
+
+    Parameters:
+        contacts — the current list (we'll add to it)
+        name, phone, email — the new contact's details
+
+    Return value: the updated contacts list.
+
+    Notice the pattern:
+      1. Receive contacts as input
+      2. Modify it
+      3. Save to disk
+      4. Return it
+    This replaces the old 'global contacts' approach.
     """
     contact = {
         "name":  name,
         "phone": phone,
         "email": email,
     }
-    contacts.append(contact)   # .append() adds an item to the end of a list
-    save_contacts()            # immediately persist to disk
+    contacts.append(contact)
+    save_contacts(contacts)
     print(f"  Contact '{name}' added.")
+    return contacts                   # ← hand back the updated list
 
 
-def list_contacts():
+def list_contacts(contacts):
     """
-    Loops through every contact and prints it.
+    Prints all contacts in a table.
 
-    enumerate() gives us both the position number AND the item
-    at the same time — handy for numbered lists.
+    Parameter: contacts — the list to display.
+    No return value needed — this function only displays, never modifies.
     """
-    if len(contacts) == 0:     # len() counts items in a list
+    if len(contacts) == 0:
         print("  No contacts yet.")
         return
 
-    print(f"  {'#':<4} {'Name':<20} {'Phone':<15} {'Email'}")
-    print(f"  {'-'*4} {'-'*20} {'-'*15} {'-'*25}")
-
-    for index, contact in enumerate(contacts):
-        # enumerate() gives us: index=0,1,2... and contact=each dict
-        # contact["name"] looks up the value stored under the key "name"
-        num    = index + 1             # start numbering from 1, not 0
-        name   = contact["name"]
-        phone  = contact["phone"]
-        email  = contact["email"]
-        print(f"  {num:<4} {name:<20} {phone:<15} {email}")
-        #       ^ The :<20 means: left-align and pad to 20 characters wide
+    print(f"  {len(contacts)} contact(s):")
+    print_contact_table(contacts)     # ← delegates to our helper
 
 
-def search_contacts(query):
+def search_contacts(contacts, query):
     """
     Searches for contacts whose name contains the query string.
 
-    .lower() converts to lowercase so the search isn't case-sensitive.
-    'in' checks whether one string appears inside another:
-        "ali" in "Alice"  → True
+    Parameters:
+        contacts — the list to search
+        query    — the string to look for
+
+    No return value — this function only displays results.
     """
     query = query.lower()
-    found = []   # we'll collect matching contacts in a new list
-
-    for contact in contacts:
-        if query in contact["name"].lower():
-            found.append(contact)
+    found = [c for c in contacts if query in c["name"].lower()]
+    # ↑ This is called a "list comprehension" — a compact way to
+    #   filter a list. It means: "give me every c in contacts where
+    #   the query appears in the name."
+    #   It's equivalent to the for-loop + append pattern from last session.
 
     if len(found) == 0:
         print(f"  No contacts matching '{query}'.")
     else:
         print(f"  Found {len(found)} match(es):")
-        for contact in found:
-            print(f"    {contact['name']}  |  {contact['phone']}  |  {contact['email']}")
+        print_contact_table(found)    # ← same helper, different data
 
 
-def delete_contact(name_to_delete):
+def delete_contact(contacts, name_to_delete):
     """
     Removes the first contact whose name matches (case-insensitive).
 
-    We loop through the list, find the right dictionary,
-    then use .remove() to take it out of the list.
+    Parameters:
+        contacts       — the current list
+        name_to_delete — the name to look for
+
+    Return value: the updated contacts list (with the contact removed).
     """
     name_lower = name_to_delete.lower()
 
     for contact in contacts:
         if contact["name"].lower() == name_lower:
-            contacts.remove(contact)   # .remove() deletes this exact item
-            save_contacts()            # immediately persist to disk
+            contacts.remove(contact)
+            save_contacts(contacts)
             print(f"  Deleted '{contact['name']}'.")
-            return   # stop after deleting the first match
+            return contacts           # ← return the shortened list
 
     print(f"  No contact named '{name_to_delete}' found.")
+    return contacts                   # ← return unchanged (nothing was deleted)
 
 
 # ------------------------------------------------------------
-# MAIN PROGRAM LOOP
+# MAIN FUNCTION
 # ------------------------------------------------------------
 
-print("=== Contact Book ===")
-load_contacts()   # read saved data before showing the menu
-print("Commands: add | list | search | delete | quit")
-print()
+def main():
+    """
+    The entry point of the program.
 
-while True:
-    command = input("Command: ").strip().lower()
-    # .strip() removes accidental spaces around the input
-    # .lower() makes 'ADD' and 'Add' work the same as 'add'
+    All the startup code and the main loop now live here,
+    instead of floating loose at the bottom of the file.
 
-    if command == "quit" or command == "q":
-        break
+    'contacts' is a regular local variable inside main().
+    We pass it into each function and get it back when needed.
+    No global variables required.
+    """
+    print("=== Contact Book ===")
 
-    elif command == "add":
-        name  = input("  Name:  ").strip()
-        phone = input("  Phone: ").strip()
-        email = input("  Email: ").strip()
-        add_contact(name, phone, email)
+    contacts = load_contacts()        # load_contacts() now RETURNS the list
 
-    elif command == "list":
-        list_contacts()
+    print("Commands: add | list | search | delete | quit")
+    print()
 
-    elif command == "search":
-        query = input("  Search name: ").strip()
-        search_contacts(query)
+    while True:
+        command = input("Command: ").strip().lower()
 
-    elif command == "delete":
-        name = input("  Delete name: ").strip()
-        delete_contact(name)
+        if command in ("quit", "q"):
+            break
 
-    else:
-        print(f"  Unknown command '{command}'. Try: add | list | search | delete | quit")
+        elif command == "add":
+            name  = input("  Name:  ").strip()
+            phone = input("  Phone: ").strip()
+            email = input("  Email: ").strip()
+            contacts = add_contact(contacts, name, phone, email)
+            # ↑ We assign the return value back to 'contacts'
+            #   so our local variable always has the latest version.
 
-    print()   # blank line between interactions
+        elif command == "list":
+            list_contacts(contacts)
 
-print("Goodbye!")
+        elif command == "search":
+            query = input("  Search name: ").strip()
+            search_contacts(contacts, query)
+
+        elif command == "delete":
+            name = input("  Delete name: ").strip()
+            contacts = delete_contact(contacts, name)
+            # ↑ Same pattern as add — reassign so we have the updated list.
+
+        else:
+            print(f"  Unknown command '{command}'. Try: add | list | search | delete | quit")
+
+        print()
+
+    print("Goodbye!")
+
+
+# ------------------------------------------------------------
+# ENTRY POINT
+# ------------------------------------------------------------
+
+if __name__ == "__main__":
+    main()
+
+# What does this do?
+#
+# Every Python file has a built-in variable called __name__.
+#
+# When you RUN this file directly:
+#   python contact_book.py
+#   → Python sets __name__ to "__main__"
+#   → the condition is True → main() runs
+#
+# When another file IMPORTS this file:
+#   import contact_book
+#   → Python sets __name__ to "contact_book"
+#   → the condition is False → main() does NOT run
+#
+# This means our functions (add_contact, search_contacts, etc.)
+# can be safely imported and reused by other programs — without
+# accidentally launching the interactive loop.
+# That will matter a lot when we start building AI agents.
