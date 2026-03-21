@@ -5,13 +5,13 @@
     "email": "alice@gmail.com"
   },
   {
-    "name": "Bob",
-    "phone": "123-456",
-    "email": "bobik@bobik.com"
-  },
-  {
     "name": "Cyril Metodej",
     "phone": "234-567-987",
     "email": "cyrilek@cy.cz"
+  },
+  {
+    "name": "Milan",
+    "phone": "602210",
+    "email": "milan@gmail.com"
   }
 ]
