@@ -1,10 +1,12 @@
 # ============================================================
-# Contact Book — Session 1.4
+# Contact Book — Session 1.4 / 1.4b
 # Concepts used: all from 1.3, plus:
 #   - main() function pattern
 #   - if __name__ == "__main__":
 #   - return values instead of global variables
 #   - helper functions to avoid repeated code
+#   - try/except for graceful error handling
+#   - raising your own exceptions with raise
 # ============================================================
 
 import json
@@ -31,8 +33,16 @@ def load_contacts():
         print(f"  Loaded {len(contacts)} contact(s) from {CONTACTS_FILE}")
         return contacts               # ← hand the list back to the caller
     except FileNotFoundError:
+        # Normal on first run — the file just doesn't exist yet
         print("  No save file found — starting with empty contact list.")
-        return []                     # ← return an empty list (not None)
+        return []
+    except json.JSONDecodeError:
+        # The file exists but its contents are not valid JSON.
+        # This can happen if the file got corrupted or was edited by hand.
+        # We warn the user and start fresh rather than crashing.
+        print("  Warning: contacts.json is corrupted and can't be read.")
+        print("  Starting with an empty contact list.")
+        return []
 
 
 def save_contacts(contacts):
@@ -97,13 +107,20 @@ def add_contact(contacts, name, phone, email):
 
     Return value: the updated contacts list.
 
-    Notice the pattern:
-      1. Receive contacts as input
-      2. Modify it
-      3. Save to disk
-      4. Return it
-    This replaces the old 'global contacts' approach.
+    Raises ValueError if any field is empty.
+    'raise' is how a function says "something is wrong — I refuse to
+    continue." The caller catches it and decides what to show the user.
     """
+    # Validate inputs before doing anything
+    if not name:
+        raise ValueError("Name cannot be empty.")
+    if not phone:
+        raise ValueError("Phone cannot be empty.")
+    if not email:
+        raise ValueError("Email cannot be empty.")
+    # 'not name' is True when name is an empty string "", None, or whitespace
+    # after .strip() — all of those mean "the user gave us nothing useful"
+
     contact = {
         "name":  name,
         "phone": phone,
@@ -199,36 +216,50 @@ def main():
     print("Commands: add | list | search | delete | quit")
     print()
 
-    while True:
-        command = input("Command: ").strip().lower()
+    try:
+        # We wrap the entire loop in try/except KeyboardInterrupt.
+        # KeyboardInterrupt is raised when the user presses Ctrl+C.
+        # Without this, Ctrl+C would print an ugly traceback and exit.
+        # With it, we catch that signal and exit cleanly instead.
+        while True:
+            command = input("Command: ").strip().lower()
 
-        if command in ("quit", "q"):
-            break
+            if command in ("quit", "q"):
+                break
 
-        elif command == "add":
-            name  = input("  Name:  ").strip()
-            phone = input("  Phone: ").strip()
-            email = input("  Email: ").strip()
-            contacts = add_contact(contacts, name, phone, email)
-            # ↑ We assign the return value back to 'contacts'
-            #   so our local variable always has the latest version.
+            elif command == "add":
+                name  = input("  Name:  ").strip()
+                phone = input("  Phone: ").strip()
+                email = input("  Email: ").strip()
+                try:
+                    contacts = add_contact(contacts, name, phone, email)
+                    # ↑ add_contact may raise ValueError if a field is empty.
+                    #   We catch it here and print a friendly message instead
+                    #   of crashing. The loop then continues normally.
+                except ValueError as e:
+                    # 'as e' captures the exception object.
+                    # str(e) gives us the message we passed to raise ValueError(...)
+                    print(f"  Error: {e}")
 
-        elif command == "list":
-            list_contacts(contacts)
+            elif command == "list":
+                list_contacts(contacts)
 
-        elif command == "search":
-            query = input("  Search name: ").strip()
-            search_contacts(contacts, query)
+            elif command == "search":
+                query = input("  Search name: ").strip()
+                search_contacts(contacts, query)
 
-        elif command == "delete":
-            name = input("  Delete name: ").strip()
-            contacts = delete_contact(contacts, name)
-            # ↑ Same pattern as add — reassign so we have the updated list.
+            elif command == "delete":
+                name = input("  Delete name: ").strip()
+                contacts = delete_contact(contacts, name)
 
-        else:
-            print(f"  Unknown command '{command}'. Try: add | list | search | delete | quit")
+            else:
+                print(f"  Unknown command '{command}'. Try: add | list | search | delete | quit")
 
-        print()
+            print()
+
+    except KeyboardInterrupt:
+        # Ctrl+C pressed — skip the normal "Goodbye!" and just exit quietly
+        print("\n  Interrupted.")
 
     print("Goodbye!")
 
