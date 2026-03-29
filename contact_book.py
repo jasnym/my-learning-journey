@@ -1,15 +1,13 @@
 # ============================================================
-# Contact Book — Session 1.4 / 1.4b
-# Concepts used: all from 1.3, plus:
-#   - main() function pattern
-#   - if __name__ == "__main__":
-#   - return values instead of global variables
-#   - helper functions to avoid repeated code
-#   - try/except for graceful error handling
-#   - raising your own exceptions with raise
+# Contact Book — Session 1.6
+# Concepts used: all from previous sessions, plus:
+#   - argparse: reading arguments from the command line
+#   - subcommands: add / list / search / delete as CLI verbs
+#   - positional arguments: required values identified by position
 # ============================================================
 
 import json
+import argparse
 
 CONTACTS_FILE = "contacts.json"
 
@@ -30,18 +28,11 @@ def load_contacts():
     try:
         with open(CONTACTS_FILE, "r") as f:
             contacts = json.load(f)
-        print(f"  Loaded {len(contacts)} contact(s) from {CONTACTS_FILE}")
-        return contacts               # ← hand the list back to the caller
+        return contacts
     except FileNotFoundError:
-        # Normal on first run — the file just doesn't exist yet
-        print("  No save file found — starting with empty contact list.")
         return []
     except json.JSONDecodeError:
-        # The file exists but its contents are not valid JSON.
-        # This can happen if the file got corrupted or was edited by hand.
-        # We warn the user and start fresh rather than crashing.
-        print("  Warning: contacts.json is corrupted and can't be read.")
-        print("  Starting with an empty contact list.")
+        print("Warning: contacts.json is corrupted. Starting fresh.")
         return []
 
 
@@ -200,68 +191,81 @@ def delete_contact(contacts, name_to_delete):
 
 def main():
     """
-    The entry point of the program.
+    Parses command-line arguments and calls the right function.
 
-    All the startup code and the main loop now live here,
-    instead of floating loose at the bottom of the file.
-
-    'contacts' is a regular local variable inside main().
-    We pass it into each function and get it back when needed.
-    No global variables required.
+    argparse replaces the old while True / input() loop entirely.
+    The user now passes everything on the command line when launching
+    the script — no interactive prompts needed.
     """
-    print("=== Contact Book ===")
 
-    contacts = load_contacts()        # load_contacts() now RETURNS the list
+    # Step 1: Create the top-level parser.
+    # 'description' is what appears at the top of --help output.
+    parser = argparse.ArgumentParser(
+        prog="contact_book",
+        description="Manage your contacts from the command line.",
+    )
 
-    print("Commands: add | list | search | delete | quit")
-    print()
+    # Step 2: Create a subparsers object.
+    # This is what enables subcommands like: contact_book.py add ...
+    # 'dest="command"' means the chosen subcommand will be stored
+    # in args.command so we can check it later.
+    # 'metavar="command"' controls how it looks in --help output.
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
+    subparsers.required = True   # print help (not a cryptic error) if no command given
 
-    try:
-        # We wrap the entire loop in try/except KeyboardInterrupt.
-        # KeyboardInterrupt is raised when the user presses Ctrl+C.
-        # Without this, Ctrl+C would print an ugly traceback and exit.
-        # With it, we catch that signal and exit cleanly instead.
-        while True:
-            command = input("Command: ").strip().lower()
+    # Step 3: Register each subcommand and its arguments.
+    #
+    # add_parser() creates a new sub-parser for that subcommand.
+    # add_argument() defines a positional argument for that subcommand.
+    # Positional = required, no flag prefix, matched by order.
+    #
+    # Usage: python3 contact_book.py add "John Smith" "555-1234" "j@email.com"
+    p_add = subparsers.add_parser("add", help="Add a new contact")
+    p_add.add_argument("name",  help="Contact's full name (use quotes for spaces)")
+    p_add.add_argument("phone", help="Phone number")
+    p_add.add_argument("email", help="Email address")
 
-            if command in ("quit", "q"):
-                break
+    # Usage: python3 contact_book.py list
+    subparsers.add_parser("list", help="List all contacts")
 
-            elif command == "add":
-                name  = input("  Name:  ").strip()
-                phone = input("  Phone: ").strip()
-                email = input("  Email: ").strip()
-                try:
-                    contacts = add_contact(contacts, name, phone, email)
-                    # ↑ add_contact may raise ValueError if a field is empty.
-                    #   We catch it here and print a friendly message instead
-                    #   of crashing. The loop then continues normally.
-                except ValueError as e:
-                    # 'as e' captures the exception object.
-                    # str(e) gives us the message we passed to raise ValueError(...)
-                    print(f"  Error: {e}")
+    # Usage: python3 contact_book.py search john
+    p_search = subparsers.add_parser("search", help="Search contacts by name")
+    p_search.add_argument("query", help="Name (or part of a name) to search for")
 
-            elif command == "list":
-                list_contacts(contacts)
+    # Usage: python3 contact_book.py delete "John Smith"
+    p_delete = subparsers.add_parser("delete", help="Delete a contact by name")
+    p_delete.add_argument("name", help="Exact name of the contact to delete")
 
-            elif command == "search":
-                query = input("  Search name: ").strip()
-                search_contacts(contacts, query)
+    # Step 4: Parse the arguments.
+    # parse_args() reads sys.argv (the actual command-line words),
+    # matches them against our definitions above, and returns a
+    # Namespace object — basically a bundle of named values.
+    #
+    # After this line:
+    #   args.command → "add", "list", "search", or "delete"
+    #   args.name    → the name string (for add/delete)
+    #   args.phone   → the phone string (for add)
+    #   args.email   → the email string (for add)
+    #   args.query   → the search string (for search)
+    args = parser.parse_args()
 
-            elif command == "delete":
-                name = input("  Delete name: ").strip()
-                contacts = delete_contact(contacts, name)
+    # Step 5: Load contacts then dispatch to the right function.
+    contacts = load_contacts()
 
-            else:
-                print(f"  Unknown command '{command}'. Try: add | list | search | delete | quit")
+    if args.command == "add":
+        try:
+            add_contact(contacts, args.name, args.phone, args.email)
+        except ValueError as e:
+            print(f"Error: {e}")
 
-            print()
+    elif args.command == "list":
+        list_contacts(contacts)
 
-    except KeyboardInterrupt:
-        # Ctrl+C pressed — skip the normal "Goodbye!" and just exit quietly
-        print("\n  Interrupted.")
+    elif args.command == "search":
+        search_contacts(contacts, args.query)
 
-    print("Goodbye!")
+    elif args.command == "delete":
+        delete_contact(contacts, args.name)
 
 
 # ------------------------------------------------------------
@@ -270,22 +274,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# What does this do?
-#
-# Every Python file has a built-in variable called __name__.
-#
-# When you RUN this file directly:
-#   python contact_book.py
-#   → Python sets __name__ to "__main__"
-#   → the condition is True → main() runs
-#
-# When another file IMPORTS this file:
-#   import contact_book
-#   → Python sets __name__ to "contact_book"
-#   → the condition is False → main() does NOT run
-#
-# This means our functions (add_contact, search_contacts, etc.)
-# can be safely imported and reused by other programs — without
-# accidentally launching the interactive loop.
-# That will matter a lot when we start building AI agents.
